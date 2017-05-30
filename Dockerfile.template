@@ -2,13 +2,6 @@ FROM resin/armv7hf-debian-qemu
 
 COPY debian-pinning /etc/apt/preferences.d/
 
-# Install Raspberrypi lib
-RUN apt-get update && apt-get install --reinstall -y \
-  libraspberrypi0 \
-  libraspberrypi-dev \
-  libraspberrypi-doc \
-  libraspberrypi-bin
-
 RUN [ "cross-build-start" ]
 
 RUN echo "deb http://archive.raspbian.org/raspbian wheezy main contrib non-free" >> /etc/apt/sources.list
