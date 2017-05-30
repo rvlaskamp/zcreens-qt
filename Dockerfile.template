@@ -1,0 +1,84 @@
+FROM resin/%%RESIN_MACHINE_NAME%%-node:latest
+
+# debian httpredir mirror proxy often ends up with 404s - editing source file to avoid it
+RUN sed -i "s!httpredir.debian.org!`curl -s -D - http://httpredir.debian.org/demo/debian/ | awk '/^Link:/ { print $2 }' | sed -e 's@<http://\(.*\)/debian/>;@\1@g'`!" /etc/apt/sources.list
+
+COPY debian-pinning /etc/apt/preferences.d/
+
+# Install Raspberrypi lib
+#
+RUN apt-get update && apt-get install --reinstall -y \
+  libraspberrypi0 \
+  libraspberrypi-dev \
+  libraspberrypi-doc \
+  libraspberrypi-bin
+
+# Install other apt deps
+RUN apt-get update && apt-get install -y \
+  apt-utils \
+  libjpeg-dev \
+  libavformat-dev \
+  libswscale-dev \
+  libavcodec-dev \
+  omxplayer \
+  build-essential \
+  autoconf \
+  liblockdev1-dev \
+  libudev-dev \
+  git \
+  libtool \
+  pkg-config \
+  cmake \
+  libudev-dev \
+  libxrandr-dev \
+  python-dev \
+  swig \
+  && rm -rf /var/lib/apt/lists/*
+
+# Move to app dir
+WORKDIR /usr/src/app
+
+# Install CEC-Client
+RUN git clone https://github.com/Pulse-Eight/platform.git
+WORKDIR /usr/src/app/platform
+RUN mkdir -p /usr/src/app/platform/build
+WORKDIR /usr/src/app/platform/build
+RUN cmake ..
+RUN make
+RUN make install
+WORKDIR /usr/src/app
+RUN git clone https://github.com/Pulse-Eight/libcec.git
+RUN mkdir -p /usr/src/app/libcec/build
+WORKDIR /usr/src/app/libcec/build
+RUN cmake -DRPI_INCLUDE_DIR=/opt/vc/include -DRPI_LIB_DIR=/opt/vc/lib ..
+RUN make -j4
+RUN make install
+RUN ldconfig
+
+WORKDIR /usr/src/app
+
+# Install AminoGFX-GL
+RUN git clone https://github.com/joshmarinacci/aminogfx-gl
+COPY ./app/rpi.cpp /usr/src/app/aminogfx-gl/src
+WORKDIR /usr/src/app/aminogfx-gl
+RUN npm install --build-from-source
+
+# Move back to app dir
+WORKDIR /usr/src/app
+
+
+# Move package.json to filesystem
+COPY ./app/package.json ./
+
+# Install npm modules for the application
+RUN JOBS=MAX npm install --unsafe-perm --production \
+	&& npm cache clean
+
+## uncomment if you want systemd
+ENV INITSYSTEM on
+
+# Move app to filesystem
+COPY ./app ./
+
+# Start app
+CMD ["node", "app.js"]
